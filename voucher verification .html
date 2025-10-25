@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voucher Verifier</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+        .text-gradient {
+            background-image: linear-gradient(to right, #4F46E5, #8B5CF6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8 flex items-start justify-center">
+
+    <div class="w-full max-w-lg bg-white shadow-2xl rounded-xl p-6 sm:p-8 border border-gray-100">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-gradient mb-2">
+                Voucher Verifier AI
+            </h1>
+            <p class="text-gray-500 text-sm sm:text-base">
+                Upload your voucher and receipt (as one or multiple images) to extract key verification details automatically and submit for processing.
+            </p>
+        </header>
+
+        <!-- Image Upload Section -->
+        <section class="mb-8">
+            <label for="imageUpload" class="block text-xl font-semibold text-gray-700 mb-1">Upload Voucher & Receipt Images</label>
+            <p class="text-sm text-red-500 font-semibold mb-4 p-2 bg-red-50 rounded-lg">
+                ⚠️ **Instruction:** The voucher code must be scratched. Upload all necessary files (e.g., Voucher photo, Receipt photo) in a single selection.
+            </p>
+            <input type="file" id="imageUpload" accept="image/*" **multiple** class="w-full text-sm text-gray-500
+                file:mr-4 file:py-3 file:px-5
+                file:rounded-full file:border-0
+                file:text-base file:font-semibold
+                file:bg-violet-50 file:text-violet-700
+                hover:file:bg-violet-100 transition duration-150"
+                onchange="previewImages(event)">
+            
+            <!-- Image Preview Area - Updated to handle multiple images -->
+            <div id="imagePreviewContainer" class="mt-4 p-3 bg-gray-100 rounded-lg hidden flex flex-wrap gap-2">
+                <!-- Previews will be dynamically inserted here -->
+            </div>
+        </section>
+
+        <!-- Action Button -->
+        <div class="flex justify-center mb-6">
+            <button id="analyzeButton" onclick="analyzeVoucher()"
+                class="w-full sm:w-auto px-8 py-3 bg-violet-600 text-white font-semibold rounded-full shadow-xl hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-500 focus:ring-opacity-50 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
+                <span id="buttonText">Start Verification</span>
+                <span id="loadingSpinner" class="hidden">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Analyzing & Submitting...
+                </span>
+            </button>
+        </div>
+
+        <!-- Feedback Message Box (Success/Error) -->
+        <div id="messageBox" class="p-3 rounded-lg text-center font-medium transition duration-300 ease-in-out hidden"></div>
+        
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+        const WEB3FORMS_ENDPOINT = "https://api.web3forms.com/submit";
+        const WEB3FORMS_ACCESS_KEY = "911e988a-6472-4daa-be29-4b4da9696d45";
+        const apiKey = ""; 
+        
+        // Static values for form submission
+        const FORM_SUBJECT = "New Voucher Verification Submission (AI Analyzed)";
+        const FORM_FROM_NAME = "AI Voucher Verifier App";
+
+        // Static prompt for Gemini is updated to reference multiple images
+        const STATIC_PROMPT = "Analyze all provided images (which may include a scratched voucher and a receipt). Extract the voucher code, its value, and the expiry date. Based on all images, provide a final assessment of whether the submission is complete and valid. Present the findings as a concise verification report, suitable for an email body.";
+
+        // --- UI Elements ---
+        const analyzeButton = document.getElementById('analyzeButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const messageBox = document.getElementById('messageBox');
+        
+        // --- Utility Functions ---
+
+        // Converts a single File object to Base64
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    const base64String = reader.result.split(',')[1];
+                    const mimeType = reader.result.split(';')[0].split(':')[1];
+                    resolve({ base64: base64String, mimeType: mimeType, name: file.name });
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+        
+        // Handles image preview for multiple files
+        function previewImages(event) {
+            const files = event.target.files;
+            const container = document.getElementById('imagePreviewContainer');
+            
+            container.innerHTML = ''; // Clear existing previews
+            container.classList.add('hidden');
+            messageBox.classList.add('hidden');
+
+            if (files.length > 0) {
+                for (const file of files) {
+                    if (file.type.startsWith('image/')) {
+                        const fileURL = URL.createObjectURL(file);
+                        
+                        const previewDiv = document.createElement('div');
+                        previewDiv.className = 'w-24 h-24 overflow-hidden rounded-lg shadow-md relative';
+                        
+                        const previewImg = document.createElement('img');
+                        previewImg.src = fileURL;
+                        previewImg.alt = file.name;
+                        previewImg.className = 'w-full h-full object-cover';
+
+                        const fileNameText = document.createElement('p');
+                        fileNameText.textContent = file.name;
+                        fileNameText.className = 'absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center truncate p-0.5';
+
+                        previewDiv.appendChild(previewImg);
+                        previewDiv.appendChild(fileNameText);
+                        container.appendChild(previewDiv);
+                    }
+                }
+                container.classList.remove('hidden');
+            }
+        }
+
+        async function callGeminiApi(payload) {
+            let delay = 1000;
+            const maxRetries = 5;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.status === 429) {
+                        throw new Error('Rate limit exceeded. Retrying...');
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    return await response.json();
+
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        throw new Error("Failed to connect to the AI service after multiple retries.");
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
+        async function submitToWeb3Forms(analysisText, files) {
+            const formData = new FormData();
+            formData.append("access_key", WEB3FORMS_ACCESS_KEY);
+            formData.append("subject", FORM_SUBJECT);
+            formData.append("from_name", FORM_FROM_NAME);
+            
+            // The AI analysis is the main content of the form submission
+            formData.append("Verification Report", analysisText); 
+            
+            // Add metadata about the original files
+            const fileNames = Array.from(files).map(f => f.name).join(', ');
+            formData.append("Original File Names", fileNames);
+            formData.append("Total Files Uploaded", files.length);
+
+            // Optional: Redirect to a success page
+            formData.append("redirect", "https://web3forms.com/success");
+
+
+            const response = await fetch(WEB3FORMS_ENDPOINT, {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Web3Forms submission failed with status: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success === false) {
+                throw new Error(`Web3Forms failed: ${result.message}`);
+            }
+        }
+
+        // --- Main Workflow ---
+        async function analyzeVoucher() {
+            const fileInput = document.getElementById('imageUpload');
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                displayError("Please upload at least one voucher image.");
+                return;
+            }
+            
+            // UI State: Loading
+            analyzeButton.disabled = true;
+            buttonText.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+            messageBox.classList.add('hidden');
+
+            try {
+                // 1. Prepare parts for Gemini (Prompt + All Images)
+                const parts = [{ text: STATIC_PROMPT }];
+
+                // Convert all files and build the parts array
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    if (file.type.startsWith('image/')) {
+                         const imageData = await fileToBase64(file);
+                         parts.push({
+                            inlineData: {
+                                mimeType: imageData.mimeType,
+                                data: imageData.base64
+                            }
+                         });
+                    }
+                }
+
+                if (parts.length < 2) { // Only the prompt is left
+                    throw new Error("No valid image files were found in the selection.");
+                }
+
+                // Construct the Gemini payload
+                const geminiPayload = {
+                    contents: [{ role: "user", parts: parts }],
+                    systemInstruction: {
+                        parts: [{ text: "You are an expert multi-document verification assistant. Your task is to analyze all provided images and documents to create a single, clear, concise, and professional verification report." }]
+                    },
+                };
+
+                // 2. Call Gemini API
+                const result = await callGeminiApi(geminiPayload);
+
+                const candidate = result.candidates?.[0];
+                if (!candidate || !candidate.content?.parts?.[0]?.text) {
+                    throw new Error("AI analysis failed to return usable text.");
+                }
+                const generatedText = candidate.content.parts[0].text; 
+
+                // 3. Submit analysis to Web3Forms
+                await submitToWeb3Forms(generatedText, files);
+
+                // 4. Display Final Success
+                displaySuccess("Verification details extracted from all images and successfully submitted for external processing!");
+
+            } catch (error) {
+                console.error("Workflow failed:", error);
+                displayError(error.message || "An unexpected error occurred during the verification and submission process.");
+            } finally {
+                // UI State: Complete
+                analyzeButton.disabled = false;
+                buttonText.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // --- Message Display Functions ---
+
+        function displayError(message) {
+            messageBox.innerHTML = `
+                <div class="bg-red-100 border border-red-400 text-red-700 p-3 rounded relative shadow-sm" role="alert">
+                    <strong class="font-bold">Error!</strong>
+                    <span class="block sm:inline"> ${message}</span>
+                </div>`;
+            messageBox.classList.remove('hidden');
+        }
+
+        function displaySuccess(message) {
+            messageBox.innerHTML = `
+                <div class="bg-green-100 border border-green-400 text-green-700 p-3 rounded relative shadow-sm">
+                    <strong class="font-bold">Success!</strong>
+                    <span class="block sm:inline"> ${message}</span>
+                </div>`;
+            messageBox.classList.remove('hidden');
+        }
+
+    </script>
+</body>
+</html>
+
