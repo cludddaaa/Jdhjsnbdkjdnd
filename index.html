@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Voucher Verifier</title>
+    <title>Voucher Submission</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -25,10 +25,10 @@
         <!-- Header -->
         <header class="text-center mb-8">
             <h1 class="text-3xl sm:text-4xl font-extrabold text-gradient mb-2">
-                Voucher Verifier AI
+                Voucher Image Submission
             </h1>
             <p class="text-gray-500 text-sm sm:text-base">
-                Upload your voucher and receipt (as one or multiple images) to extract key verification details automatically and submit for processing.
+                Directly upload your images for processing. No AI analysis will be performed.
             </p>
         </header>
 
@@ -54,15 +54,15 @@
 
         <!-- Action Button -->
         <div class="flex justify-center mb-6">
-            <button id="analyzeButton" onclick="analyzeVoucher()"
+            <button id="analyzeButton" onclick="submitVoucher()"
                 class="w-full sm:w-auto px-8 py-3 bg-violet-600 text-white font-semibold rounded-full shadow-xl hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-500 focus:ring-opacity-50 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
-                <span id="buttonText">Analyze & Submit</span>
+                <span id="buttonText">Submit Images</span>
                 <span id="loadingSpinner" class="hidden">
                     <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Analyzing & Submitting...
+                    Submitting Files...
                 </span>
             </button>
         </div>
@@ -73,18 +73,13 @@
     </div>
 
     <script>
-        // --- Configuration ---
-        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+        // --- Configuration (Only Web3Forms needed) ---
         const WEB3FORMS_ENDPOINT = "https://api.web3forms.com/submit";
         const WEB3FORMS_ACCESS_KEY = "911e988a-6472-4daa-be29-4b4da9696d45";
-        const apiKey = ""; 
         
         // Static values for form submission
-        const FORM_SUBJECT = "New Voucher Verification Submission (AI Analyzed)";
-        const FORM_FROM_NAME = "AI Voucher Verifier App";
-
-        // Static prompt for Gemini is updated to reference multiple images
-        const STATIC_PROMPT = "Analyze all provided images (which may include a scratched voucher and a receipt). Extract the voucher code, its value, and the expiry date. Based on all images, provide a final assessment of whether the submission is complete and valid. Present the findings as a concise verification report, suitable for an email body.";
+        const FORM_SUBJECT = "New Direct Image Submission";
+        const FORM_FROM_NAME = "Voucher Submission App";
 
         // --- UI Elements ---
         const analyzeButton = document.getElementById('analyzeButton');
@@ -94,20 +89,6 @@
         
         // --- Utility Functions ---
 
-        // Converts a single File object to Base64
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => {
-                    const base64String = reader.result.split(',')[1];
-                    const mimeType = reader.result.split(';')[0].split(':')[1];
-                    resolve({ base64: base64String, mimeType: mimeType, name: file.name });
-                };
-                reader.onerror = error => reject(error);
-            });
-        }
-        
         // Handles image preview for multiple files
         function previewImages(event) {
             const files = event.target.files;
@@ -143,61 +124,24 @@
             }
         }
 
-        async function callGeminiApi(payload) {
-            console.log("--- DEBUG: Starting Gemini API call ---");
-            let delay = 1000;
-            const maxRetries = 5;
-
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (response.status === 429) {
-                        console.warn(`Retry attempt ${i + 1}: Rate limit exceeded.`);
-                        throw new Error('Rate limit exceeded. Retrying...');
-                    }
-
-                    if (!response.ok) {
-                         const errorBody = await response.json();
-                         console.error("Gemini API Non-OK Response Body:", errorBody);
-                         throw new Error(`Gemini API Error: Status ${response.status}. See console for details.`);
-                    }
-
-                    console.log("--- DEBUG: Gemini API call successful ---");
-                    return await response.json();
-
-                } catch (error) {
-                    if (i === maxRetries - 1) {
-                        console.error("Gemini API call failed after multiple retries. Final Error:", error);
-                        throw new Error("AI Analysis Failed. Check browser console for network details.");
-                    }
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2;
-                }
-            }
-        }
-
-        async function submitToWeb3Forms(analysisText, files) {
+        async function submitToWeb3Forms(files) {
             console.log("--- DEBUG: Starting Web3Forms submission ---");
             const formData = new FormData();
             formData.append("access_key", WEB3FORMS_ACCESS_KEY);
             formData.append("subject", FORM_SUBJECT);
             formData.append("from_name", FORM_FROM_NAME);
             
-            // 1. Append AI Analysis Report
-            formData.append("Verification Report (AI Summary)", analysisText); 
+            // Default message for the email body
+            formData.append("Submission_Type", "Direct Image Upload"); 
+            formData.append("Message", `Total ${files.length} images uploaded for verification. See attachments.`);
             
-            // 2. Append original image files
+            // Append original image files
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 if (file.type.startsWith('image/')) {
                     // Append the actual File object for upload
-                    // The file name will be used as the field name in the email/submission data
-                    formData.append(`Uploaded_Image_${i + 1} (${file.name})`, file);
+                    // Web3Forms will handle the file attachment to your email
+                    formData.append(`Uploaded_Image_${i + 1}`, file, file.name); 
                 }
             }
             
@@ -222,13 +166,13 @@
             console.log("--- DEBUG: Web3Forms submission successful ---");
         }
 
-        // --- Main Workflow ---
-        async function analyzeVoucher() {
+        // --- Main Workflow (Renamed and Simplified) ---
+        async function submitVoucher() {
             const fileInput = document.getElementById('imageUpload');
             const files = fileInput.files;
 
             if (files.length === 0) {
-                displayError("Please upload at least one voucher image.");
+                displayError("Please upload at least one image.");
                 return;
             }
             
@@ -239,55 +183,11 @@
             messageBox.classList.add('hidden');
 
             try {
-                console.log("--- DEBUG: Step 1: Preparing image files for AI analysis ---");
-                // 1. Prepare parts for Gemini (Prompt + All Images)
-                const parts = [{ text: STATIC_PROMPT }];
+                // Directly submit original files to Web3Forms
+                await submitToWeb3Forms(files);
 
-                // Convert all files to Base64 for the Gemini API call
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    if (file.type.startsWith('image/')) {
-                         const imageData = await fileToBase64(file);
-                         parts.push({
-                            inlineData: {
-                                mimeType: imageData.mimeType,
-                                data: imageData.base64
-                            }
-                         });
-                    }
-                }
-
-                if (parts.length < 2) { // Only the prompt is left
-                    throw new Error("No valid image files were found in the selection. Please select image files (JPEG/PNG).");
-                }
-                console.log(`--- DEBUG: ${parts.length - 1} image(s) converted to Base64 for AI ---`);
-
-
-                // Construct the Gemini payload
-                const geminiPayload = {
-                    contents: [{ role: "user", parts: parts }],
-                    systemInstruction: {
-                        parts: [{ text: "You are an expert multi-document verification assistant. Your task is to analyze all provided images and documents to create a single, clear, concise, and professional verification report." }]
-                    },
-                };
-
-                // 2. Call Gemini API
-                const result = await callGeminiApi(geminiPayload);
-
-                const candidate = result.candidates?.[0];
-                if (!candidate || !candidate.content?.parts?.[0]?.text) {
-                     console.error("Gemini result structure error:", result);
-                    throw new Error("AI analysis failed: The model returned an empty response. Please try again with a clearer image.");
-                }
-                const generatedText = candidate.content.parts[0].text; 
-
-                console.log("--- DEBUG: Step 2: AI Analysis Complete. Starting Web3Forms Submission (with files) ---");
-
-                // 3. Submit analysis AND original files to Web3Forms
-                await submitToWeb3Forms(generatedText, files);
-
-                // 4. Display Final Success
-                displaySuccess("Verification report generated and the original images were successfully emailed!");
+                // Display Final Success
+                displaySuccess("Images successfully uploaded and emailed!");
 
             } catch (error) {
                 // Final comprehensive error logging
