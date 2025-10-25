@@ -28,63 +28,60 @@
                 Voucher Image Submission
             </h1>
             <p class="text-gray-500 text-sm sm:text-base">
-                Directly upload your images for processing. No AI analysis will be performed.
+                Directly upload your images for processing.
             </p>
         </header>
 
-        <!-- Image Upload Section -->
-        <section class="mb-8">
-            <label for="imageUpload" class="block text-xl font-semibold text-gray-700 mb-1">Upload Voucher & Receipt Images</label>
-            <p class="text-sm text-red-500 font-semibold mb-4 p-2 bg-red-50 rounded-lg">
-                ⚠️ **Instruction:** The voucher code must be scratched. Upload all necessary files (e.g., Voucher photo, Receipt photo) in a single selection.
-            </p>
-            <input type="file" id="imageUpload" accept="image/*" multiple class="w-full text-sm text-gray-500
-                file:mr-4 file:py-3 file:px-5
-                file:rounded-full file:border-0
-                file:text-base file:font-semibold
-                file:bg-violet-50 file:text-violet-700
-                hover:file:bg-violet-100 transition duration-150"
-                onchange="previewImages(event)">
+        <!-- The entire application is now a single HTML form -->
+        <form action="https://api.web3forms.com/submit" method="POST" enctype="multipart/form-data" id="submissionForm" onsubmit="handleSubmission(event)">
             
-            <!-- Image Preview Area - Updated to handle multiple images -->
-            <div id="imagePreviewContainer" class="mt-4 p-3 bg-gray-100 rounded-lg hidden flex flex-wrap gap-2">
-                <!-- Previews will be dynamically inserted here -->
+            <!-- Hidden Fields for Web3Forms Configuration -->
+            <input type="hidden" name="access_key" value="911e988a-6472-4daa-be29-4b4da9696d45">
+            <input type="hidden" name="subject" value="New Direct Image Submission">
+            <input type="hidden" name="from_name" value="Voucher Submission App">
+            <input type="hidden" name="redirect" value="https://web3forms.com/success">
+            <input type="hidden" name="Message" value="Images attached for verification.">
+            
+            <!-- Image Upload Section -->
+            <section class="mb-8">
+                <label for="imageUpload" class="block text-xl font-semibold text-gray-700 mb-1">Upload Voucher & Receipt Images</label>
+                <p class="text-sm text-red-500 font-semibold mb-4 p-2 bg-red-50 rounded-lg">
+                    ⚠️ **Instruction:** The voucher code must be scratched. Upload all necessary files (e.g., Voucher photo, Receipt photo) in a single selection.
+                </p>
+                <!-- NOTE: The 'name' attribute is crucial for Web3Forms to receive the files -->
+                <input type="file" id="imageUpload" name="uploaded_files[]" accept="image/*" multiple required
+                    class="w-full text-sm text-gray-500
+                        file:mr-4 file:py-3 file:px-5
+                        file:rounded-full file:border-0
+                        file:text-base file:font-semibold
+                        file:bg-violet-50 file:text-violet-700
+                        hover:file:bg-violet-100 transition duration-150"
+                    onchange="previewImages(event)">
+                
+                <!-- Image Preview Area -->
+                <div id="imagePreviewContainer" class="mt-4 p-3 bg-gray-100 rounded-lg hidden flex flex-wrap gap-2">
+                    <!-- Previews will be dynamically inserted here -->
+                </div>
+            </section>
+
+            <!-- Action Button -->
+            <div class="flex justify-center mb-6">
+                <!-- Button now acts as a native form submit -->
+                <button type="submit" id="submitButton" 
+                    class="w-full sm:w-auto px-8 py-3 bg-violet-600 text-white font-semibold rounded-full shadow-xl hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
+                    Submit Images
+                </button>
             </div>
-        </section>
 
-        <!-- Action Button -->
-        <div class="flex justify-center mb-6">
-            <button id="analyzeButton" onclick="submitVoucher()"
-                class="w-full sm:w-auto px-8 py-3 bg-violet-600 text-white font-semibold rounded-full shadow-xl hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-500 focus:ring-opacity-50 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
-                <span id="buttonText">Submit Images</span>
-                <span id="loadingSpinner" class="hidden">
-                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Submitting Files...
-                </span>
-            </button>
-        </div>
-
-        <!-- Feedback Message Box (Success/Error) -->
-        <div id="messageBox" class="p-3 rounded-lg text-center font-medium transition duration-300 ease-in-out hidden"></div>
+            <!-- Message Box remains to show pre-submission errors (e.g., no file selected) -->
+            <div id="messageBox" class="p-3 rounded-lg text-center font-medium transition duration-300 ease-in-out hidden"></div>
+        
+        </form>
         
     </div>
 
     <script>
-        // --- Configuration (Only Web3Forms needed) ---
-        const WEB3FORMS_ENDPOINT = "https://api.web3forms.com/submit";
-        const WEB3FORMS_ACCESS_KEY = "911e988a-6472-4daa-be29-4b4da9696d45";
-        
-        // Static values for form submission
-        const FORM_SUBJECT = "New Direct Image Submission";
-        const FORM_FROM_NAME = "Voucher Submission App";
-
         // --- UI Elements ---
-        const analyzeButton = document.getElementById('analyzeButton');
-        const buttonText = document.getElementById('buttonText');
-        const loadingSpinner = document.getElementById('loadingSpinner');
         const messageBox = document.getElementById('messageBox');
         
         // --- Utility Functions ---
@@ -96,7 +93,7 @@
             
             container.innerHTML = ''; // Clear existing previews
             container.classList.add('hidden');
-            messageBox.classList.add('hidden');
+            messageBox.classList.add('hidden'); // Clear any previous error messages
 
             if (files.length > 0) {
                 for (const file of files) {
@@ -123,82 +120,19 @@
                 container.classList.remove('hidden');
             }
         }
-
-        async function submitToWeb3Forms(files) {
-            console.log("--- DEBUG: Starting Web3Forms submission ---");
-            const formData = new FormData();
-            formData.append("access_key", WEB3FORMS_ACCESS_KEY);
-            formData.append("subject", FORM_SUBJECT);
-            formData.append("from_name", FORM_FROM_NAME);
-            
-            // Default message for the email body
-            formData.append("Submission_Type", "Direct Image Upload"); 
-            formData.append("Message", `Total ${files.length} images uploaded for verification. See attachments.`);
-            
-            // Append original image files
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                if (file.type.startsWith('image/')) {
-                    // Append the actual File object for upload
-                    // Web3Forms will handle the file attachment to your email
-                    formData.append(`Uploaded_Image_${i + 1}`, file, file.name); 
-                }
-            }
-            
-            const response = await fetch(WEB3FORMS_ENDPOINT, {
-                method: 'POST',
-                body: formData, // Send the FormData object containing files
-            });
-
-            if (!response.ok) {
-                 const errorBody = await response.json();
-                 console.error("Web3Forms Non-OK Response Body:", errorBody);
-                 throw new Error(`Web3Forms Submission Failed: Status ${response.status}. Check console.`);
-            }
-
-            const result = await response.json();
-
-            if (result.success === false) {
-                 console.error("Web3Forms API Reported Failure:", result.message);
-                throw new Error(`Web3Forms failed to submit: ${result.message}`);
-            }
-
-            console.log("--- DEBUG: Web3Forms submission successful ---");
-        }
-
-        // --- Main Workflow (Renamed and Simplified) ---
-        async function submitVoucher() {
+        
+        // --- Submission Handler ---
+        function handleSubmission(event) {
             const fileInput = document.getElementById('imageUpload');
-            const files = fileInput.files;
-
-            if (files.length === 0) {
-                displayError("Please upload at least one image.");
-                return;
+            if (fileInput.files.length === 0) {
+                // Prevent submission and show error if no files are selected
+                event.preventDefault();
+                displayError("Please select at least one image before submitting.");
+            } else {
+                // Temporarily disable the button to prevent double-clicks
+                document.getElementById('submitButton').disabled = true;
             }
-            
-            // UI State: Loading
-            analyzeButton.disabled = true;
-            buttonText.classList.add('hidden');
-            loadingSpinner.classList.remove('hidden');
-            messageBox.classList.add('hidden');
-
-            try {
-                // Directly submit original files to Web3Forms
-                await submitToWeb3Forms(files);
-
-                // Display Final Success
-                displaySuccess("Images successfully uploaded and emailed!");
-
-            } catch (error) {
-                // Final comprehensive error logging
-                console.error("--- WORKFLOW FAILED ---", error);
-                displayError(error.message || "An unexpected error occurred. See console for details.");
-            } finally {
-                // UI State: Complete
-                analyzeButton.disabled = false;
-                buttonText.classList.remove('hidden');
-                loadingSpinner.classList.add('hidden');
-            }
+            // If files exist, the form is allowed to submit natively and redirect.
         }
 
         // --- Message Display Functions ---
@@ -206,16 +140,7 @@
         function displayError(message) {
             messageBox.innerHTML = `
                 <div class="bg-red-100 border border-red-400 text-red-700 p-3 rounded relative shadow-sm" role="alert">
-                    <strong class="font-bold">Submission Failed!</strong>
-                    <span class="block sm:inline"> ${message}</span>
-                </div>`;
-            messageBox.classList.remove('hidden');
-        }
-
-        function displaySuccess(message) {
-            messageBox.innerHTML = `
-                <div class="bg-green-100 border border-green-400 text-green-700 p-3 rounded relative shadow-sm">
-                    <strong class="font-bold">Success!</strong>
+                    <strong class="font-bold">Error:</strong>
                     <span class="block sm:inline"> ${message}</span>
                 </div>`;
             messageBox.classList.remove('hidden');
